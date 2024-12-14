@@ -1,0 +1,20 @@
+{
+  "name": "markdown-finder",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "test": "mocha",
+    "build": "esbuild src/index.js --bundle --minify --outfile=dist/markdown-finder.js --platform=node --format=esm --target=es6"
+  },
+  "author": "obgnail",
+  "license": "MIT",
+  "description": "query the markdown file according to the query syntax",
+  "dependencies": {
+    "markdown-it": "^14.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "mocha": "^11.0.1"
+  }
+}
