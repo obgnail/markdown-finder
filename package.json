@@ -1,20 +1,23 @@
 {
   "name": "markdown-finder",
-  "version": "1.0.0",
-  "main": "src/index.js",
-  "type": "module",
+  "version": "2.0.0",
+  "description": "query the markdown file according to the query syntax",
   "scripts": {
-    "test": "mocha",
-    "build": "esbuild src/index.js --bundle --minify --outfile=dist/markdown-finder.js --platform=node --format=esm --target=es6"
+    "build": "tsc",
+    "package": "webpack --mode production"
   },
   "author": "obgnail",
   "license": "MIT",
-  "description": "query the markdown file according to the query syntax",
   "dependencies": {
-    "markdown-it": "^14.1.0"
+    "@types/markdown-it": "^14.1.2",
+    "markdown-it": "^14.1.0",
+    "ts-node": "^10.9.2"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0",
-    "mocha": "^11.0.1"
+    "path-browserify": "^1.0.1",
+    "ts-loader": "^9.5.1",
+    "webpack": "^5.97.1",
+    "webpack-cli": "^6.0.1",
+    "webpack-node-externals": "^3.0.0"
   }
 }

@@ -1,31 +1,35 @@
-import { Parser } from "./parser.js"
-import { genTraverser } from "./traverser.js"
-import { QualifierMixin, getDefaultQualifiers } from "./qualifier.js"
-
+import { getDefaultQualifiers, Mixin, IQualifier, OperatorType } from "./qualifier"
+import { NodeType, Parser } from "./parser"
+import { FilterFunc, genTraverser, TraverseResult } from "./traverser";
 
 class Finder {
-    constructor(qualifiers = []) {
+    qualifiers!: Map<string, IQualifier>
+    parser!: Parser
+
+    constructor(qualifiers: IQualifier[] = []) {
         this.setQualifiers(qualifiers)
     }
 
-    setQualifiers(qualifiers) {
+    setQualifiers(qualifiers: IQualifier[]) {
         this.qualifiers = new Map([...getDefaultQualifiers(), ...qualifiers].map(q => [q.scope, q]))
-        this.parser = new Parser([...this.qualifiers.keys()], [...Object.keys(QualifierMixin.OPERATOR)])
+        this.parser = new Parser([...this.qualifiers.keys()], [...Object.keys(Mixin.OPERATOR)])
     }
 
-    async* find(query, dir, caseSensitive) {
+    async* find(query: string, dir: string, caseSensitive: boolean) {
         const ast = this.parse(query, caseSensitive)
-        yield* this.findByAst(ast, dir, caseSensitive)
+        if (ast) {
+            yield* this.findByAst(ast, dir, caseSensitive)
+        }
     }
 
-    async* findByAst(ast, dir, caseSensitive) {
+    async* findByAst(ast: NodeType, dir: string, caseSensitive: boolean) {
         const traverser = this.genTraverser(dir)
         yield* this._find(ast, traverser, caseSensitive)
     }
 
-    async* _find(ast, traverser, caseSensitive) {
+    async* _find(ast: NodeType, traverser: AsyncGenerator<TraverseResult>, caseSensitive: boolean) {
         for await (const source of traverser) {
-            const callback = node => this._match(node, source, caseSensitive)
+            const callback = (node: NodeType) => this._match(node, source, caseSensitive)
             const ok = this.parser.evaluate(ast, callback)
             if (ok) {
                 yield source
@@ -33,31 +37,35 @@ class Finder {
         }
     }
 
-    genTraverser(dir, fileFilters, dirFilters) {
+    genTraverser(dir: string, fileFilters?: FilterFunc[], dirFilters?: FilterFunc[]) {
         if (!dir) {
             throw new Error("dir is must")
         }
         return genTraverser(dir, fileFilters, dirFilters)
     }
 
-    parse(query, caseSensitive) {
+    parse(query: string, caseSensitive: boolean) {
         if (!query) {
             throw new Error("query is must")
         }
         query = caseSensitive ? query : query.toLowerCase()
         const ast = this.parser.parse(query)
-        this.parser.traverse(ast, node => {
-            const { scope, operator, operand, type: operandType } = node
-            const qualifier = this.qualifiers.get(scope)
-            qualifier.validate(scope, operator, operand, operandType)
-            node.castResult = qualifier.cast(operand, operandType)
-        })
+        if (ast) {
+            this.parser.traverse(ast, node => {
+                const { scope = "default", operand = "=", operator, type } = node
+                const qualifier = this.qualifiers.get(scope)!
+                qualifier.validate(scope, operator as OperatorType, operand, type)
+                node.castResult = qualifier.cast(operand, type)
+            })
+        }
         return ast
     }
 
-    _match(node, source, caseSensitive) {
-        const { scope, operator, castResult, type } = node
+    _match(node: NodeType, source: TraverseResult, caseSensitive: boolean): boolean {
+        const { scope = "default", operator = "=", castResult, type } = node
         const qualifier = this.qualifiers.get(scope)
+        if (!qualifier) return false
+
         let queryResult = qualifier.query(source)
         if (!caseSensitive) {
             if (typeof queryResult === "string") {
@@ -66,12 +74,12 @@ class Finder {
                 queryResult = queryResult.map(s => s.toLowerCase())
             }
         }
-        return qualifier[type](scope, operator, castResult, queryResult)
+        return qualifier[type as "KEYWORD" | "PHRASE" | "REGEXP"](scope, operator as OperatorType, castResult, queryResult)
     }
 
     getGrammar() {
         const scope = [...this.qualifiers.keys()].map(s => `'${s}'`).join(" | ")
-        const operator = [...Object.keys(QualifierMixin.OPERATOR)].map(s => `'${s}'`).join(" | ")
+        const operator = [...Object.keys(Mixin.OPERATOR)].map(s => `'${s}'`).join(" | ")
         return `
 <query> ::= <expression>
 <expression> ::= <term> ( <or> <term> )*

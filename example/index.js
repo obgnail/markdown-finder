@@ -1,4 +1,4 @@
-import { Finder } from "../dist/markdown-finder.js"
+const { Finder } = require("../dist/markdown-find.js")
 
 const dir = "D:/myshare/Dropbox/root/md"
 const caseSensitive = false

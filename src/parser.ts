@@ -8,10 +8,44 @@ const TYPE = {
     PHRASE: "PHRASE",
     REGEXP: "REGEXP",
     QUALIFIER: "QUALIFIER",
+} as const
+
+type Type = keyof typeof TYPE
+
+type InvalidPosition = {
+    FIRST: Set<Type>
+    LAST: Set<Type>
+    FOLLOW: Partial<Record<Type, Set<Type>>>
+    AND: {
+        PREV: Set<Type>
+        NEXT: Set<Type>
+    }
 }
 
+type TokenizeMatchResult = Record<Type, string | undefined> & {
+    SCOPE: string | undefined
+    OPERATOR: string | undefined
+}
+
+interface NodeType {
+    type: Type
+    scope?: string
+    operator?: string
+    operand?: string
+    left?: NodeType
+    right?: NodeType
+    castResult?: any
+}
+
+type AstHandler = (node: NodeType) => any
+
+const DefaultScope = ["default", "file", "path", "ext", "content", "time", "size"]
+const DefaultOperator = [">=", "<=", ":", "=", ">", "<"]
+
 class Parser {
-    static INVALID_POSITION = {
+    private regex: RegExp | undefined
+
+    private static readonly INVALID_POSITION: InvalidPosition = {
         FIRST: new Set([TYPE.OR, TYPE.AND, TYPE.PAREN_CLOSE]),
         LAST: new Set([TYPE.OR, TYPE.AND, TYPE.NOT, TYPE.PAREN_OPEN, TYPE.QUALIFIER]),
         FOLLOW: {
@@ -27,15 +61,12 @@ class Parser {
         },
     }
 
-    constructor(
-        scope = ["default", "file", "path", "ext", "content", "time", "size"],
-        operator = [">=", "<=", ":", "=", ">", "<"],
-    ) {
+    constructor(scope: string[] = DefaultScope, operator: string[] = DefaultOperator) {
         this.setQualifier(scope, operator)
     }
 
-    setQualifier(scope, operator) {
-        const byLength = (a, b) => b.length - a.length
+    setQualifier(scope: string[], operator: string[]) {
+        const byLength = (a: string, b: string) => b.length - a.length
         const _scope = [...scope].sort(byLength).join("|")
         const _operator = [...operator].sort(byLength).join("|")
         this.regex = new RegExp(
@@ -54,14 +85,22 @@ class Parser {
         )
     }
 
-    tokenize(query) {
+    tokenize(query: string): NodeType [] {
+        if (!this.regex) {
+            throw new Error("Must set qualifier")
+        }
+
         return [...query.trim().matchAll(this.regex)]
             .map(_tokens => {
-                const [qualifier, operand = ""] = Object.entries(_tokens.groups).find(([_, v]) => v != null)
-                const type = TYPE[qualifier] || TYPE.KEYWORD
-                return qualifier === TYPE.QUALIFIER
-                    ? { type, scope: _tokens.groups.SCOPE, operator: _tokens.groups.OPERATOR }
-                    : { type, operand }
+                const group = _tokens.groups as TokenizeMatchResult
+                const match = Object.entries(group).find(([_, v]) => v != null) as [Type, string]
+                const [qualifier, operand = ""] = match
+                const type = TYPE[qualifier] ?? TYPE.KEYWORD
+                const ret: NodeType =
+                    qualifier === TYPE.QUALIFIER
+                        ? { type, scope: group.SCOPE, operator: group.OPERATOR }
+                        : { type, operand }
+                return ret
             })
             .filter((token, i, tokens) => {
                 if (token.type !== TYPE.AND) return true
@@ -78,7 +117,7 @@ class Parser {
             })
     }
 
-    check(tokens) {
+    check(tokens: NodeType []) {
         // check first
         const first = tokens[0]
         if (Parser.INVALID_POSITION.FIRST.has(first.type)) {
@@ -93,8 +132,10 @@ class Parser {
 
         // check follow
         tokens.slice(0, -1).forEach((token, i) => {
-            const set = Parser.INVALID_POSITION.FOLLOW[token.type]
             const follow = tokens[i + 1]
+            if (!Parser.INVALID_POSITION.FOLLOW.hasOwnProperty(token.type)) return
+
+            const set = Parser.INVALID_POSITION.FOLLOW[token.type]
             if (set && set.has(follow.type)) {
                 throw new Error(`Invalid token sequence:「${token.type}」followed by「${follow.type}」`)
             }
@@ -117,7 +158,7 @@ class Parser {
         }
     }
 
-    _parseExpression(tokens) {
+    private _parseExpression(tokens: NodeType []): NodeType | undefined {
         let node = this._parseTerm(tokens)
         while (tokens.length > 0) {
             const type = tokens[0].type
@@ -132,7 +173,7 @@ class Parser {
         return node
     }
 
-    _parseTerm(tokens) {
+    private _parseTerm(tokens: NodeType []): NodeType | undefined {
         let node = this._parseFactor(tokens)
         while (tokens.length > 0) {
             const type = tokens[0].type
@@ -147,29 +188,29 @@ class Parser {
         return node
     }
 
-    _parseFactor(tokens) {
-        const qualifier = (tokens[0].type === TYPE.QUALIFIER)
-            ? tokens.shift()
+    private _parseFactor(tokens: NodeType []): NodeType | undefined {
+        const qualifier: NodeType = (tokens[0].type === TYPE.QUALIFIER)
+            ? tokens.shift()!
             : { type: TYPE.QUALIFIER, scope: "default", operator: ":" }
         const node = this._parseMatch(tokens)
         return this._setQualifier(node, qualifier)
     }
 
-    _parseMatch(tokens) {
+    private _parseMatch(tokens: NodeType []): NodeType | undefined {
         const type = tokens[0].type
         if (type === TYPE.PHRASE || type === TYPE.KEYWORD || type === TYPE.REGEXP) {
-            return { type, operand: tokens.shift().operand }
+            return { type, operand: tokens.shift()!.operand }
         } else if (type === TYPE.PAREN_OPEN) {
             tokens.shift()
             const node = this._parseExpression(tokens)
-            if (tokens.shift().type !== TYPE.PAREN_CLOSE) {
+            if (tokens.shift()!.type !== TYPE.PAREN_CLOSE) {
                 throw new Error(`Unmatched「${TYPE.PAREN_OPEN}」`)
             }
             return node
         }
     }
 
-    _setQualifier(node, qualifier) {
+    private _setQualifier(node: NodeType | undefined, qualifier: NodeType): NodeType | undefined {
         if (!node) return
         const type = node.type
         const isLeaf = type === TYPE.PHRASE || type === TYPE.KEYWORD || type === TYPE.REGEXP
@@ -184,7 +225,7 @@ class Parser {
         return node
     }
 
-    parse(query) {
+    parse(query: string): NodeType | undefined {
         query = query.trim()
         const tokens = this.tokenize(query)
         if (tokens.length === 0) {
@@ -198,10 +239,10 @@ class Parser {
         return ast
     }
 
-    evaluate(ast, callback) {
+    evaluate(ast: NodeType, callback: AstHandler): Boolean {
         const { KEYWORD, PHRASE, REGEXP, OR, AND, NOT } = TYPE
 
-        function _eval(node) {
+        function _eval(node: NodeType): Boolean {
             const { type, left, right } = node
             switch (type) {
                 case KEYWORD:
@@ -209,11 +250,11 @@ class Parser {
                 case REGEXP:
                     return callback(node)
                 case OR:
-                    return _eval(left) || _eval(right)
+                    return _eval(left!) || _eval(right!)
                 case AND:
-                    return _eval(left) && _eval(right)
+                    return _eval(left!) && _eval(right!)
                 case NOT:
-                    return (left ? _eval(left) : true) && !_eval(right)
+                    return (left ? _eval(left) : true) && !_eval(right!)
                 default:
                     throw new Error(`Unknown AST node「${type}」`)
             }
@@ -222,10 +263,10 @@ class Parser {
         return _eval(ast)
     }
 
-    traverse(ast, callback) {
+    traverse(ast: NodeType, callback: AstHandler) {
         const { KEYWORD, PHRASE, REGEXP, OR, AND, NOT } = TYPE
 
-        function _eval(node) {
+        function _eval(node: NodeType) {
             const { type, left, right } = node
             switch (type) {
                 case KEYWORD:
@@ -235,12 +276,12 @@ class Parser {
                     break
                 case OR:
                 case AND:
-                    _eval(left)
-                    _eval(right)
+                    _eval(left!)
+                    _eval(right!)
                     break
                 case NOT:
                     left && _eval(left)
-                    _eval(right)
+                    _eval(right!)
                     break
                 default:
                     throw new Error(`Unknown AST node「${type}」`)
@@ -251,4 +292,4 @@ class Parser {
     }
 }
 
-export { Parser, TYPE as TokenType }
+export { Parser, TYPE, DefaultScope, DefaultOperator, NodeType }
