@@ -74,7 +74,7 @@ queryByAST()
 | "sour pear"                                                  | ...the content contains the exact phrase "sour pear".        |
 | sour pear -apple                                             | ...the content contains both "sour" and "pear", but does NOT contain "apple". |
 | /\bsour\b/ pear time=2024-03-12                              | ...the content contains the word "sour" (whole-word match), also contains "pear", and the file was last modified on 2024-03-12. |
-| head=plugin \| strong:MIT                                    | ...the heading contains the word "head", AND the text marked as strong contains “MIT” |
+| head=plugin \| strong:MIT                                    | ...the heading content is the word "plugin", AND the text marked as strong contains “MIT” |
 | size>10k (linenum>=1000 \| hasimage=true)                    | …the file size is greater than 10KB, AND the file either has at least 1000 lines or contains images. |
 | path:(info \| warn \| err) -ext:md                           | …the file path contains 'info', 'warn', or 'err', AND the file extension does not contain 'md' |
 | file:/[a-z]{3}/ content:prometheus blockcode:"kubectl apply" | ...the file name matches the regular expression `/[a-z]{3}/`, AND the content contains "prometheus", AND a code block contains the phrase "kubectl apply". |
@@ -89,29 +89,12 @@ const finder = new Finder()
 finder.getGrammar()
 
 // Query by grammar
+// This query finds Markdown files that are larger than 10KB OR contain the text "abc".
 const iterator = finder.find("size>10kb | content:abc", dir, caseSensitive)
 
 // Query by AST
+// This query finds Markdown files that have a file name contains three lowercase letters and contain a Python code block.
 const ast = finder.parse(`file:/[a-z]{3}/ blockcodelang:python`)
 const iterator = finder.findByAst(ast, dir, caseSensitive)
 ```
-
-### Grammar Query Example
-
-```javascript
-const iterator = finder.find("size>10kb | content:abc", dir, caseSensitive)
-```
-
-This query finds Markdown files that are larger than 10KB OR contain the text "abc".
-
-
-
-### Query by AST Example
-
-```javascript
-const ast = finder.parse(`file:/[a-z]{3}/ blockcodelang:python`)
-const iterator = finder.findByAst(ast, dir, caseSensitive)
-```
-
-This query finds Markdown files that have a file name starting with three lowercase letters and contain a Python code block.
 

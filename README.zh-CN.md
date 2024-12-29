@@ -89,29 +89,14 @@ const finder = new Finder()
 finder.getGrammar()
 
 // 通过文法查询
+// 这个查询会找到文件大小大于 10KB 或者内容包含 "abc" 的 Markdown 文件
 const iterator = finder.find("size>10kb | content:abc", dir, caseSensitive)
 
 // 通过抽象语法树查询
+// 这个查询会找到文件名以三个小写字母开头并且包含 Python 代码块的 Markdown 文件
 const ast = finder.parse(`file:/[a-z]{3}/ blockcodelang:python`)
 const iterator = finder.findByAst(ast, dir, caseSensitive)
 ```
 
-### 文法查询示例
 
-```javascript
-const iterator = finder.find("size>10kb | content:abc", dir, caseSensitive)
-```
-
-这个查询会找到文件大小大于 10KB 或者内容包含 "abc" 的 Markdown 文件。
-
-
-
-### 通过 AST 查询示例
-
-```javascript
-const ast = finder.parse(`file:/[a-z]{3}/ blockcodelang:python`)
-const iterator = finder.findByAst(ast, dir, caseSensitive)
-```
-
-这个查询会找到文件名以三个小写字母开头并且包含 Python 代码块的 Markdown 文件。
 
