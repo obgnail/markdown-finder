@@ -19,25 +19,28 @@ Markdown Finder 是一个基于 Node.js 的工具，用于在本地目录中搜�
 ```javascript
 import { Finder } from "../dist/markdown-finder.js"
 
-const dir = "D:/myshare/Dropbox/root/md"
+const finder = new Finder()
+const dir = "D:/root/md"
 const caseSensitive = false
 
-async function query() {
-    const finder = new Finder()
-    console.log(finder.getGrammar())
+// 获取查询文法
+console.log(finder.getGrammar())
 
-    const iterator = finder.find("size>10kb | content:abc", dir, caseSensitive)
-    for await (const source of iterator) {
-        console.log(source.path)
+async function query() {
+    // 这个查询会找到文件大小大于 10KB 或者内容包含 "abc" 的 Markdown 文件
+    const q = "size>10kb | content:abc"
+    const files = finder.find(q, dir, caseSensitive)
+    for await (const file of files) {
+        console.log(file.path)
     }
 }
 
 async function queryByAST() {
-    const finder = new Finder()
+    // 这个查询会找到文件名以三个小写字母开头并且包含 Python 代码块的 Markdown 文件
     const ast = finder.parse(`file:/[a-z]{3}/ blockcodelang:python`)
-    const iterator = finder.findByAst(ast, dir, caseSensitive)
-    for await (const source of iterator) {
-        console.log(source.path)
+    const files = finder.findByAst(ast, dir, caseSensitive)
+    for await (const file of files) {
+        console.log(file.path)
     }
 }
 
@@ -78,25 +81,4 @@ queryByAST()
 | size>10k (linenum>=1000 \| hasimage=true)                    | 文件大小超过 10KB，并且文件要么至少有 1000 行，要么包含图片  |
 | path:(info \| warn \| err) -ext:md                           | 文件路径包含 info 或 warn 或 err，且扩展名不含 md            |
 | file:/[a-z]{3}/ content:prometheus blockcode:"kubectl apply" | 文件名匹配正则 [a-z]{3}，且内容包含 prometheus，且代码块内容含有 kubectl apply |
-
-## API
-
-```javascript
-import { Finder } from "../dist/markdown-finder.js"
-const finder = new Finder()
-
-// 获取查询文法
-finder.getGrammar()
-
-// 通过文法查询
-// 这个查询会找到文件大小大于 10KB 或者内容包含 "abc" 的 Markdown 文件
-const iterator = finder.find("size>10kb | content:abc", dir, caseSensitive)
-
-// 通过抽象语法树查询
-// 这个查询会找到文件名以三个小写字母开头并且包含 Python 代码块的 Markdown 文件
-const ast = finder.parse(`file:/[a-z]{3}/ blockcodelang:python`)
-const iterator = finder.findByAst(ast, dir, caseSensitive)
-```
-
-
 

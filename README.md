@@ -19,25 +19,28 @@ Markdown Finder is a Node.js tool designed to search for Markdown files within a
 ```javascript
 import { Finder } from "../dist/markdown-finder.js"
 
-const dir = "D:/myshare/Dropbox/root/md"
+const finder = new Finder()
+const dir = "D:/root/md"
 const caseSensitive = false
 
-async function query() {
-    const finder = new Finder()
-    console.log(finder.getGrammar())
+// Show the query grammar
+console.log(finder.getGrammar())
 
-    const iterator = finder.find("size>10kb | content:abc", dir, caseSensitive)
-    for await (const source of iterator) {
-        console.log(source.path)
+async function query() {
+    // This query finds Markdown files that are larger than 10KB OR contain the text "abc".
+    const q = "size>10kb | content:abc"
+    const files = finder.find(q, dir, caseSensitive)
+    for await (const file of files) {
+        console.log(file.path)
     }
 }
 
 async function queryByAST() {
-    const finder = new Finder()
+    // This query finds Markdown files that have a file name contains three lowercase letters and contain a Python code block.
     const ast = finder.parse(`file:/[a-z]{3}/ blockcodelang:python`)
-    const iterator = finder.findByAst(ast, dir, caseSensitive)
-    for await (const source of iterator) {
-        console.log(source.path)
+    const files = finder.findByAst(ast, dir, caseSensitive)
+    for await (const file of files) {
+        console.log(file.path)
     }
 }
 
@@ -78,23 +81,4 @@ queryByAST()
 | size>10k (linenum>=1000 \| hasimage=true)                    | …the file size is greater than 10KB, AND the file either has at least 1000 lines or contains images. |
 | path:(info \| warn \| err) -ext:md                           | …the file path contains 'info', 'warn', or 'err', AND the file extension does not contain 'md' |
 | file:/[a-z]{3}/ content:prometheus blockcode:"kubectl apply" | ...the file name matches the regular expression `/[a-z]{3}/`, AND the content contains "prometheus", AND a code block contains the phrase "kubectl apply". |
-
-## API
-
-```javascript
-import { Finder } from "../dist/markdown-finder.js"
-const finder = new Finder()
-
-// Get the query grammar
-finder.getGrammar()
-
-// Query by grammar
-// This query finds Markdown files that are larger than 10KB OR contain the text "abc".
-const iterator = finder.find("size>10kb | content:abc", dir, caseSensitive)
-
-// Query by AST
-// This query finds Markdown files that have a file name contains three lowercase letters and contain a Python code block.
-const ast = finder.parse(`file:/[a-z]{3}/ blockcodelang:python`)
-const iterator = finder.findByAst(ast, dir, caseSensitive)
-```
 
