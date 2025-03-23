@@ -5,10 +5,20 @@ import { TraverseResult } from "./traverser"
 
 type OperatorType = ":" | "=" | "!=" | ">=" | "<=" | ">" | "<"
 type UnitType = "k" | "m" | "g" | "kb" | "mb" | "gb"
+type ValidateFunc = "isStringOrRegexp" | "isComparable" | "isBoolean" | "isSize" | "isNumber" | "isDate"
+type CastFunc = "toStringOrRegexp" | "toNumber" | "toBoolean" | "toBytes" | "toDate"
+type MatchFunc = "primitiveCompare" | "stringRegexp" | "arrayCompare" | "arrayRegexp"
+type BaseScopeType = "default" | "path" | "file" | "ext" | "content" | "time" | "size" | "linenum" | "charnum" | "chinesenum"
+    | "crlf" | "hasimage" | "haschinese" | "line"
+type MarkdownScopeType = | "blockcode" | "blockcodelang" | "blockcodebody" | "blockcodeline"
+    | "blockhtml" | "blockquote" | "table" | "thead" | "tbody" | "ol" | "ul" | "task" | "taskdone" | "tasktodo" | "head"
+    | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "highlight" | "image" | "code" | "link" | "strong" | "em" | "del"
+type ScopeType = BaseScopeType | MarkdownScopeType
+
 type OperandType = keyof typeof TYPE
 
 interface IValidate {
-    (scope: string, operator: OperatorType, operand: string, operandType: OperandType): void
+    (scope: ScopeType, operator: OperatorType, operand: string, operandType: OperandType): void
 }
 
 interface ICast {
@@ -20,12 +30,12 @@ interface IQuery {
 }
 
 interface IMatch {
-    (scope: string, operator: OperatorType, operand: any, queryResult: any): boolean
+    (scope: ScopeType, operator: OperatorType, operand: any, queryResult: any): boolean
 }
 
 interface IQualifier {
     // Qualifier scope
-    scope: string
+    scope: ScopeType
     // Name for explain
     name: string
     // Is Qualifier scope a metadata property
@@ -93,8 +103,8 @@ class Mixin {
         gb: 1 << 30,
     }
 
-    static readonly VALIDATE: Record<string, IValidate> = {
-        isStringOrRegexp: (scope: string, operator: OperatorType, operand: string, operandType: OperandType) => {
+    static readonly VALIDATE: Record<ValidateFunc, IValidate> = {
+        isStringOrRegexp: (scope, operator, operand, operandType) => {
             if (operandType === "REGEXP") {
                 if (operator !== ":") {
                     throw new Error(`In ${scope.toUpperCase()}: RegExp operands only support the ":" operator`)
@@ -109,7 +119,7 @@ class Mixin {
                 throw new Error(`In ${scope.toUpperCase()}: Only supports "=", "!=", and ":" operators`)
             }
         },
-        isComparable: (scope: string, operator: OperatorType, operand: string, operandType: OperandType) => {
+        isComparable: (scope, operator, operand, operandType) => {
             if (operandType === "REGEXP") {
                 throw new Error(`In ${scope.toUpperCase()}: RegExp operands are not valid for comparisons`)
             }
@@ -117,7 +127,7 @@ class Mixin {
                 throw new Error(`In ${scope.toUpperCase()}: The ":" operator is not valid for comparisons`)
             }
         },
-        isBoolean: (scope: string, operator: OperatorType, operand: string, operandType: OperandType) => {
+        isBoolean: (scope, operator, operand, operandType) => {
             if (operator !== "=" && operator !== "!=") {
                 throw new Error(`In ${scope.toUpperCase()}: Only supports "=" and "!=" operators for logical comparisons`)
             }
@@ -128,7 +138,7 @@ class Mixin {
                 throw new Error(`In ${scope.toUpperCase()}: Operand must be "true" or "false"`)
             }
         },
-        isSize: (scope: string, operator: OperatorType, operand: string, operandType: OperandType) => {
+        isSize: (scope, operator, operand, operandType) => {
             Mixin.VALIDATE.isComparable(scope, operator, operand, operandType)
             const units = [...Object.keys(Mixin.UNITS)].sort((a, b) => b.length - a.length).join("|")
             const ok = new RegExp(`^\\d+(\\.\\d+)?(${units})$`, "i").test(operand)
@@ -136,13 +146,13 @@ class Mixin {
                 throw new Error(`In ${scope.toUpperCase()}: Operand must be a number followed by a unit: ${units}`)
             }
         },
-        isNumber: (scope: string, operator: OperatorType, operand: string, operandType: OperandType) => {
+        isNumber: (scope, operator, operand, operandType) => {
             Mixin.VALIDATE.isComparable(scope, operator, operand, operandType)
             if (isNaN(Number(operand))) {
                 throw new Error(`In ${scope.toUpperCase()}: Operand must be a valid number`)
             }
         },
-        isDate: (scope: string, operator: OperatorType, operand: string, operandType: OperandType) => {
+        isDate: (scope, operator, operand, operandType) => {
             Mixin.VALIDATE.isComparable(scope, operator, operand, operandType)
             if (isNaN(new Date(operand).getTime())) {
                 throw new Error(`In ${scope.toUpperCase()}: Operand must be a valid date string`)
@@ -150,11 +160,11 @@ class Mixin {
         },
     }
 
-    static readonly CAST: Record<string, ICast> = {
-        toStringOrRegexp: (operand: string, operandType: OperandType) => operandType === "REGEXP" ? new RegExp(operand) : operand.toString(),
-        toNumber: (operand: string) => Number(operand),
-        toBoolean: (operand: string) => operand.toLowerCase() === "true",
-        toBytes: (operand: string) => {
+    static readonly CAST: Record<CastFunc, ICast> = {
+        toStringOrRegexp: (operand, operandType) => operandType === "REGEXP" ? new RegExp(operand) : operand.toString(),
+        toNumber: (operand) => Number(operand),
+        toBoolean: (operand) => operand.toLowerCase() === "true",
+        toBytes: (operand) => {
             const units = [...Object.keys(Mixin.UNITS)].sort((a, b) => b.length - a.length).join("|")
             const match = operand.match(/^(\d+(\.\d+)?)([a-z]+)$/i)
             if (!match) {
@@ -166,27 +176,27 @@ class Mixin {
             }
             return parseFloat(match[1]) * Mixin.UNITS[unit]
         },
-        toDate: (operand: string) => truncateTime(operand),
+        toDate: (operand) => truncateTime(operand),
     }
 
-    static readonly MATCH: Record<string, IMatch> = {
-        primitiveCompare: (scope: string, operator: OperatorType, operand: any, queryResult: any) => {
+    static readonly MATCH: Record<MatchFunc, IMatch> = {
+        primitiveCompare: (scope: ScopeType, operator: OperatorType, operand: any, queryResult: any) => {
             return Mixin.OPERATOR[operator](queryResult, operand)
         },
-        stringRegexp: (scope: string, operator: OperatorType, operand: RegExp, queryResult: string) => {
+        stringRegexp: (scope: ScopeType, operator: OperatorType, operand: RegExp, queryResult: string) => {
             return operand.test(queryResult.toString())
         },
-        arrayCompare: (scope: string, operator: OperatorType, operand: any, queryResult: any[]) => {
+        arrayCompare: (scope: ScopeType, operator: OperatorType, operand: any, queryResult: any[]) => {
             return queryResult.some(data => Mixin.OPERATOR[operator](data, operand))
         },
-        arrayRegexp: (scope: string, operator: OperatorType, operand: RegExp, queryResult: string[]) => {
+        arrayRegexp: (scope: ScopeType, operator: OperatorType, operand: RegExp, queryResult: string[]) => {
             return queryResult.some(data => operand.test(data))
         },
     }
 }
 
 function buildBaseQualifiers(): IQualifier[] {
-    const QUERY: Record<string, IQuery> = {
+    const QUERY: Record<BaseScopeType, IQuery> = {
         default: ({ path, file, stats, data }) => `${data.toString()}\n${path}`,
         path: ({ path, file, stats, data }) => path,
         file: ({ path, file, stats, data }) => file,
@@ -381,7 +391,7 @@ function buildMarkdownQualifiers(): IQualifier[] {
             return nodes.flatMap(transformer).filter(Boolean)
         }
     }
-    const buildQualifier = (scope: string, name: string, parser: IParser, filter: IFilter, transformer: ITransformer) => {
+    const buildQualifier = (scope: MarkdownScopeType, name: string, parser: IParser, filter: IFilter, transformer: ITransformer) => {
         const query = buildQuery(parser, filter, transformer)
         const is_meta = false
         const validate = Mixin.VALIDATE.isStringOrRegexp
@@ -429,4 +439,4 @@ const getDefaultQualifiers = (): IQualifier[] => {
     return [...buildBaseQualifiers(), ...buildMarkdownQualifiers()]
 }
 
-export { Mixin, PARSER as MarkdownParser, getDefaultQualifiers, IQualifier, OperatorType }
+export { Mixin, PARSER as MarkdownParser, getDefaultQualifiers, IQualifier, OperatorType, ScopeType }

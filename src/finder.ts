@@ -1,4 +1,4 @@
-import { getDefaultQualifiers, Mixin, IQualifier, OperatorType } from "./qualifier"
+import { getDefaultQualifiers, Mixin, IQualifier, OperatorType, ScopeType } from "./qualifier"
 import { NodeType, Parser } from "./parser"
 import { FilterFunc, genTraverser, TraverseResult } from "./traverser";
 
@@ -54,7 +54,7 @@ class Finder {
             this.parser.traverse(ast, node => {
                 const { scope = "default", operand = "=", operator, type } = node
                 const qualifier = this.qualifiers.get(scope)!
-                qualifier.validate(scope, operator as OperatorType, operand, type)
+                qualifier.validate(scope as ScopeType, operator as OperatorType, operand, type)
                 node.castResult = qualifier.cast(operand, type)
             })
         }
@@ -74,7 +74,7 @@ class Finder {
                 queryResult = queryResult.map(s => s.toLowerCase())
             }
         }
-        return qualifier[type as "KEYWORD" | "PHRASE" | "REGEXP"](scope, operator as OperatorType, castResult, queryResult)
+        return qualifier[type as "KEYWORD" | "PHRASE" | "REGEXP"](scope as ScopeType, operator as OperatorType, castResult, queryResult)
     }
 
     getGrammar() {
